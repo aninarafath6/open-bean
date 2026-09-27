@@ -1,11 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Net Worth · open-bean{% endblock %}
+{% import "macros.html" as m %}
+{% block title %}Trends · open-bean{% endblock %}
+{% block page_class %}narrow{% endblock %}
+{% block heading %}Net worth{% endblock %}
 {% block content %}
-{% if !errors.is_empty() %}
-<div class="errors">{% for e in errors %}{{ e }}
-{% endfor %}</div>
-{% endif %}
-
-<h2>Net Worth Over Time</h2>
-{{ svg|safe }}
+<section class="hero-card blue rise" style="--i:0">
+  <p class="hero-eyebrow">Net worth today</p>
+  <p class="hero-value">{% call m::hero_value(page.current) %}</p>
+  {% if let Some(trend) = page.trend %}
+  <span class="trend-chip">{% if trend.is_negative() %}▼{% else %}▲{% endif %} {{ trend.text }} all-time</span>
+  {% endif %}
+</section>
+<p class="section-title">Over time</p>
+<div class="card chart-wrap rise" style="--i:1">{{ page.svg|safe }}</div>
 {% endblock %}

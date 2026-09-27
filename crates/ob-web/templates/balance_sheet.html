@@ -1,42 +1,18 @@
 {% extends "base.html" %}
+{% import "macros.html" as m %}
 {% block title %}Balance Sheet · open-bean{% endblock %}
+{% block page_class %}narrow{% endblock %}
+{% block heading %}Balance sheet{% endblock %}
 {% block content %}
-{% if !errors.is_empty() %}
-<div class="errors">{% for e in errors %}{{ e }}
-{% endfor %}</div>
-{% endif %}
-
+<section class="hero-card blue rise" style="--i:0">
+  <p class="hero-eyebrow">Net worth · as of {{ sheet.as_of }}</p>
+  <p class="hero-value">{% call m::hero_value(sheet.net_worth) %}</p>
+</section>
 <form class="range" method="get">
   <label>As of <input type="date" name="as_of" value="{{ sheet.as_of }}"></label>
-  <button type="submit">Update</button>
+  <button class="btn-pill" type="submit">Update</button>
 </form>
-
-<h2>{{ sheet.assets.title }}</h2>
-<table>
-{% for row in sheet.assets.rows %}
-<tr><td>{% if let Some(link) = row.link %}<a href="{{ link }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}</td>{% for c in row.cells %}<td class="num {% if c.negative %}neg{% else %}pos{% endif %}">{{ c.text }}</td>{% endfor %}</tr>
-{% endfor %}
-<tr class="total"><td>Total</td>{% for c in sheet.assets.total %}<td class="num {% if c.negative %}neg{% else %}pos{% endif %}">{{ c.text }}</td>{% endfor %}</tr>
-</table>
-
-<h2>{{ sheet.liabilities.title }}</h2>
-<table>
-{% for row in sheet.liabilities.rows %}
-<tr><td>{% if let Some(link) = row.link %}<a href="{{ link }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}</td>{% for c in row.cells %}<td class="num {% if c.negative %}neg{% else %}pos{% endif %}">{{ c.text }}</td>{% endfor %}</tr>
-{% endfor %}
-<tr class="total"><td>Total</td>{% for c in sheet.liabilities.total %}<td class="num {% if c.negative %}neg{% else %}pos{% endif %}">{{ c.text }}</td>{% endfor %}</tr>
-</table>
-
-<h2>{{ sheet.equity.title }}</h2>
-<table>
-{% for row in sheet.equity.rows %}
-<tr><td>{% if let Some(link) = row.link %}<a href="{{ link }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}</td>{% for c in row.cells %}<td class="num {% if c.negative %}neg{% else %}pos{% endif %}">{{ c.text }}</td>{% endfor %}</tr>
-{% endfor %}
-<tr class="total"><td>Total</td>{% for c in sheet.equity.total %}<td class="num {% if c.negative %}neg{% else %}pos{% endif %}">{{ c.text }}</td>{% endfor %}</tr>
-</table>
-
-<h2>Net Worth</h2>
-<table>
-<tr>{% for c in sheet.net_worth %}<td class="num {% if c.negative %}neg{% else %}pos{% endif %}">{{ c.text }}</td>{% endfor %}</tr>
-</table>
+{% call m::section_card(sheet.assets, 1) %}
+{% call m::section_card(sheet.liabilities, 2) %}
+{% call m::section_card(sheet.equity, 3) %}
 {% endblock %}

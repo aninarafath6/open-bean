@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Home · open-bean{% endblock %}
+{% block header %}
+<div class="me grow">
+  <span class="face">{{ home.initial }}</span>
+  <div>
+    <div class="hi">Hi, {{ home.greeting|lower }}</div>
+    <div class="who">{{ home.name }} 👋</div>
+  </div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="home">
+  <div class="col">
+    <section class="hero-card rise o1" style="--i:0">
+      {% if !home.months.is_empty() %}
+      <nav class="pills" aria-label="Month">
+        {% for m in home.months %}<a href="{{ m.href }}" class="{% if m.active %}on{% endif %}">{{ m.label }}</a>{% endfor %}
+      </nav>
+      {% endif %}
+      <p class="hero-date">{{ home.month_label }}</p>
+      <div class="gauge-wrap">
+        {{ home.gauge_svg|safe }}
+        <div class="gauge-center">
+          <div class="gauge-value" data-countup="{{ home.gauge_value }}" data-decimals="0" data-prefix="{{ home.prefix }}" data-suffix="{{ home.suffix }}">{{ home.gauge_text }}</div>
+          <div class="gauge-caption">{{ home.gauge_caption }}</div>
+        </div>
+      </div>
+      <div class="chips">
+        <div class="chip"><span class="ic">💰</span><div><div class="k">Income</div><div class="v">{{ home.income_text }}</div></div></div>
+        <div class="chip"><span class="ic">🛍️</span><div><div class="k">Spent</div><div class="v">{{ home.spent_text }}</div></div></div>
+      </div>
+    </section>
+
+    {% if let Some(nw) = home.net_worth %}
+    <a class="card rise o2" style="--i:1" href="/reports/net-worth">
+      <div class="action">
+        <span class="badge round" style="--c:#15A05E">📈</span>
+        <div class="txt">
+          <div class="t">Net worth {{ nw.text }}</div>
+          <div class="s">{% if let Some(t) = home.net_trend %}<span class="{{ t.class() }}">{% if t.is_negative() %}▼{% else %}▲{% endif %} {{ t.text }}</span> all-time{% else %}As of {{ home.month_label }}{% endif %}</div>
+        </div>
+        <span class="btn-pill">View</span>
+      </div>
+      {% if !home.sparkline.is_empty() %}<div class="spark">{{ home.sparkline|safe }}</div>{% endif %}
+    </a>
+    {% endif %}
+
+    <div class="duo o3">
+      <div class="card widget rise" style="--i:2">
+        <div class="w-head"><span class="badge sm" style="--c:#1C7CF2">🐷</span>Savings</div>
+        <div class="w-value">{{ home.savings_pct }}</div>
+        <div class="segs">{% for on in home.segments() %}<i class="{% if on %}on{% endif %}"></i>{% endfor %}</div>
+        <div class="w-meta">{{ home.savings_caption }}</div>
+      </div>
+      <div class="card widget rise" style="--i:3">
+        <div class="w-head"><span class="badge sm" style="--c:#F25F2F">🔥</span>Top spend</div>
+        {% if let Some(top) = home.top_category %}
+        <div class="w-value">{{ top.emoji }} {{ top.label }}</div>
+        <div class="w-meta"><span>{{ top.amount }}</span>·<span>{{ top.pct }} of spending</span></div>
+        {% else %}
+        <div class="w-value">—</div>
+        <div class="w-meta">Nothing spent yet</div>
+        {% endif %}
+        <a class="ghost-btn" href="/reports/income-statement">＋ {{ home.txn_count }} transactions</a>
+      </div>
+    </div>
+
+    <section class="card rise o6" style="--i:4">
+      <div class="card-head"><h3>Recent activity</h3><a class="link" href="/accounts">Accounts</a></div>
+      {% if home.recent.is_empty() %}
+      <div class="empty">No transactions this month.</div>
+      {% else %}
+      <div class="list">
+        {% for a in home.recent %}
+        <div class="item">
+          <span class="badge">{{ a.emoji }}</span>
+          <div class="txt"><div class="t">{{ a.title }}</div><div class="s">{{ a.subtitle }}</div></div>
+          <span class="a {{ a.class }}">{{ a.amount }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="card rise o4" style="--i:2">
+      <div class="card-head"><h3>Monthly spending</h3><span class="meta">{{ home.bars_total }}</span></div>
+      {% if home.bars.is_empty() %}
+      <div class="empty">No spending recorded yet.</div>
+      {% else %}
+      <div class="bars">
+        {% for b in home.bars %}
+        <a href="{{ b.href }}" class="{% if b.active %}on{% endif %}" title="{{ b.label }}: {{ b.amount }}">
+          <span class="track"><span class="fill" style="height:{{ b.height }}%"></span></span>
+          <span class="lbl">{{ b.label }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="card rise o5" style="--i:3">
+      <div class="card-head"><h3>Where it went</h3><a class="link" href="/reports/income-statement">See all</a></div>
+      {% if home.tiles.is_empty() %}
+      <div class="empty">No spending this month. 🎉</div>
+      {% else %}
+      <div class="tiles">
+        {% for t in home.tiles %}
+        <div class="tile{% if loop.first %} featured{% endif %}" style="--i:{{ loop.index0 }}">
+          {% if !loop.first %}<span class="pct">{{ t.pct }}</span>{% endif %}
+          <span class="emo">{{ t.emoji }}</span>
+          <span class="name">{{ t.label }}</span>
+          <span class="amt">{{ t.amount }}{% if loop.first %} · {{ t.pct }}{% endif %}</span>
+          <span class="mini"><span style="width:{{ t.width }}%"></span></span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </section>
+
+  </div>
+</div>
+{% endblock %}
