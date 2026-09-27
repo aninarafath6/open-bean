@@ -1,0 +1,5 @@
+option "title" "Sample Personal Finance"
+option "operating_currency" "INR"
+
+include "anin_sample_accounts.beancount"
+include "anin_sample_txns.beancount"

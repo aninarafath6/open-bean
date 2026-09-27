@@ -1,0 +1,22 @@
+2026-01-01 * "Employer" "Payslip"
+  Income:Sample:Salary                -50000 INR
+  Assets:Sample:Bank:Checking          50000 INR
+
+2026-01-02 * "Landlord" "Rent settlement"
+  ; two postings hitting the same account, like a real split settlement
+  Assets:Sample:Bank:Checking          -5105.51 INR
+  Assets:Sample:Bank:Checking          -5964.00 INR
+  Expenses:Sample:Housing:Rent         10500.51 INR
+  Expenses:Sample:Housing:Utilities       569.00 INR
+  Income:Sample:Cashback                  -2.85 INR
+  Assets:Sample:Bank:Checking              +2.85 INR
+
+2026-01-03 * "Friend" "Settlement"
+  Assets:Sample:Bank:Checking          -1710.25 INR
+  Expenses:Sample:Food
+
+2026-01-05 * "Card payment" "Credit card"
+  Liabilities:Sample:CreditCard         12777.00 INR
+  Assets:Sample:Bank:Checking          -12777.00 INR
+
+2026-01-10 balance Assets:Sample:Bank:Checking 24446.09 INR

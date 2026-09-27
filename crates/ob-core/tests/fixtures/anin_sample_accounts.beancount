@@ -1,0 +1,8 @@
+2026-01-01 open Assets:Sample:Bank:Checking
+2026-01-01 open Assets:Sample:Cash
+2026-01-01 open Income:Sample:Salary
+2026-01-01 open Income:Sample:Cashback
+2026-01-01 open Expenses:Sample:Housing:Rent
+2026-01-01 open Expenses:Sample:Housing:Utilities
+2026-01-01 open Expenses:Sample:Food
+2026-01-01 open Liabilities:Sample:CreditCard

@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ob-diagnostics",
+    "crates/ob-syntax",
+    "crates/ob-core",
+    "crates/ob-cli",
+]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+clap = { version = "4", features = ["derive"] }
+miette = { version = "7", features = ["fancy"] }
+thiserror = "2"
+logos = "0.15"
+rust_decimal = "1"
+rust_decimal_macros = "1"
+ustr = "1"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+insta = "1"
+proptest = "1"
