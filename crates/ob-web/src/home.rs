@@ -1,96 +1,71 @@
-//! The home screen: a month-at-a-glance view built around one question —
-//! "how much of this month's income is left?" — plus the supporting
-//! context (net worth, savings rate, where the money went, what happened
-//! recently). Framework-agnostic like `reports`; templates only format.
+//! The home screen: one month at a time, answering "how much did I spend,
+//! on what, and where did it go" — nothing else. Framework-agnostic like
+//! `reports`; templates only lay it out.
 
 use std::collections::BTreeMap;
 
-use chrono::{Datelike, NaiveDate, Timelike};
+use chrono::{Datelike, NaiveDate, NaiveDateTime, Timelike};
 use ob_core::{AccountType, Directive, Ledger, Transaction};
 use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 use ustr::Ustr;
 
 use crate::reports::{
-    Cell, category_key_and_label, currency_affixes, end_of_month, money, net_worth_now,
+    Cell, category_key_and_label, end_of_month, money, money_html, natural_dp, net_worth_now,
     net_worth_series, operating_currency, render_net_worth_sparkline, trend_since_first,
 };
 
 type MonthKey = (i32, u32);
 
-pub struct MonthPill {
-    pub label: String,
-    pub href: String,
-    pub active: bool,
+/// One day's spending in the month strip.
+pub struct Day {
+    /// Bar height relative to the month's biggest day, 0–100.
+    pub height: f64,
+    pub title: String,
+    pub any: bool,
 }
 
-pub struct Tile {
-    pub emoji: &'static str,
+pub struct Category {
     pub label: String,
     pub amount: String,
     pub pct: String,
-    /// Bar width relative to the largest category, 0–100.
+    /// Bar width relative to the biggest category, 0–100.
     pub width: f64,
 }
 
-pub struct Bar {
-    pub label: String,
-    pub amount: String,
-    /// Bar height relative to the biggest month shown, 0–100.
-    pub height: f64,
-    pub active: bool,
-    pub href: String,
-}
-
+/// One transaction card: who, when, how much, and an uppercase category
+/// pill ("FOOD", "INCOME", "TRANSFER").
 pub struct Activity {
-    pub emoji: &'static str,
     pub title: String,
-    pub subtitle: String,
-    pub amount: String,
+    pub when: String,
+    pub amount_html: String,
+    pub category: String,
     pub class: &'static str,
 }
 
 pub struct Home {
-    pub greeting: &'static str,
-    pub name: String,
-    pub initial: String,
+    /// "GOOD EVENING, ANIN" and "IT'S 27TH OF SEPTEMBER, A SUNDAY".
+    pub greeting: String,
+    pub dateline: String,
     pub month_label: String,
-    pub months: Vec<MonthPill>,
-
-    pub gauge_svg: String,
-    pub gauge_value: f64,
-    pub gauge_text: String,
-    pub gauge_caption: String,
-    pub prefix: String,
-    pub suffix: String,
+    pub prev_href: Option<String>,
+    pub next_href: Option<String>,
+    pub spent_html: String,
     pub income_text: String,
-    pub spent_text: String,
-
-    pub net_worth: Option<Cell>,
+    pub saved_text: String,
+    /// Whether `saved_text` is good news (kept money) or bad (overspent).
+    pub saved_up: bool,
+    pub axis_start: String,
+    pub axis_end: String,
+    /// Share of income spent, 0–100 (100 when there's no income).
+    pub progress: f64,
+    pub days: Vec<Day>,
+    pub categories: Vec<Category>,
+    pub activity: Vec<Activity>,
+    pub txn_count: usize,
+    pub net_worth_html: Option<String>,
     pub net_trend: Option<Cell>,
     pub sparkline: String,
-
-    pub savings_pct: String,
-    /// Filled segments out of `SEGMENTS`, for the segmented progress bar.
-    pub savings_filled: usize,
-    pub savings_caption: String,
-    pub txn_count: usize,
-    pub top_category: Option<Tile>,
-
-    pub bars: Vec<Bar>,
-    pub bars_total: String,
-    pub tiles: Vec<Tile>,
-    pub recent: Vec<Activity>,
-}
-
-pub const SEGMENTS: usize = 8;
-
-impl Home {
-    /// `0..SEGMENTS` paired with whether each segment is filled, so the
-    /// template can render the segmented bar without arithmetic.
-    pub fn segments(&self) -> Vec<bool> {
-        (0..SEGMENTS).map(|i| i < self.savings_filled).collect()
-    }
 }
 
 fn greeting(hour: u32) -> &'static str {
@@ -101,77 +76,24 @@ fn greeting(hour: u32) -> &'static str {
     }
 }
 
-/// "Anin's Personal Finance" -> "Anin". Falls back to a neutral "there" so
-/// the greeting always reads naturally.
-fn owner_name(title: Option<&str>) -> String {
+fn ordinal(n: u32) -> String {
+    let suffix = match (n % 10, n % 100) {
+        (_, 11..=13) => "th",
+        (1, _) => "st",
+        (2, _) => "nd",
+        (3, _) => "rd",
+        _ => "th",
+    };
+    format!("{n}{suffix}")
+}
+
+/// "Anin's Personal Finance" -> "Anin"; `None` when the title isn't a
+/// possessive, so the greeting just omits the name.
+fn owner_name(title: Option<&str>) -> Option<String> {
     title
         .and_then(|t| t.split_once("'s").or_else(|| t.split_once("’s")))
         .map(|(name, _)| name.trim().to_string())
         .filter(|n| !n.is_empty() && n.len() <= 24)
-        .unwrap_or_else(|| "there".to_string())
-}
-
-/// A friendly glyph per spending category, keyed on the words people
-/// actually use for their accounts. Unknown categories get a neutral one.
-pub fn category_emoji(label: &str) -> &'static str {
-    let l = label.to_lowercase();
-    let has = |words: &[&str]| words.iter().any(|w| l.contains(w));
-    if has(&["rent", "housing", "house"]) {
-        "🏠"
-    } else if has(&["home", "family", "remit"]) {
-        "🏡"
-    } else if has(&[
-        "food",
-        "breakfast",
-        "lunch",
-        "dinner",
-        "grocer",
-        "restaurant",
-        "snack",
-    ]) {
-        "🍽️"
-    } else if has(&["fuel", "petrol", "diesel", "gas"]) {
-        "⛽"
-    } else if has(&[
-        "travel",
-        "trip",
-        "flight",
-        "train",
-        "taxi",
-        "cab",
-        "transport",
-    ]) {
-        "✈️"
-    } else if has(&["gift"]) {
-        "🎁"
-    } else if has(&["appear", "cloth", "fashion", "salon", "hair", "beauty"]) {
-        "👕"
-    } else if has(&["tax", "lwf", "labor", "labour", "fee"]) {
-        "🧾"
-    } else if has(&[
-        "util", "electric", "water", "internet", "phone", "mobile", "solar",
-    ]) {
-        "💡"
-    } else if has(&["health", "medic", "pharma", "doctor", "fitness", "gym"]) {
-        "💊"
-    } else if has(&[
-        "subscri",
-        "netflix",
-        "hotstar",
-        "spotify",
-        "entertain",
-        "movie",
-    ]) {
-        "🎬"
-    } else if has(&["invest", "sip", "stock", "mutual"]) {
-        "📈"
-    } else if has(&["emi", "loan", "interest"]) {
-        "🏦"
-    } else if has(&["educat", "book", "course"]) {
-        "📚"
-    } else {
-        "💸"
-    }
 }
 
 fn transactions(ledger: &Ledger) -> impl Iterator<Item = &Transaction> {
@@ -183,6 +105,10 @@ fn transactions(ledger: &Ledger) -> impl Iterator<Item = &Transaction> {
 
 fn month_start((y, m): MonthKey) -> NaiveDate {
     NaiveDate::from_ymd_opt(y, m, 1).expect("valid month")
+}
+
+fn month_href((y, m): MonthKey) -> String {
+    format!("/?month={y}-{m:02}")
 }
 
 fn parse_month(s: &str) -> Option<MonthKey> {
@@ -209,12 +135,20 @@ fn flows(txn: &Transaction, currency: Ustr) -> (Decimal, Decimal) {
     (income, spent)
 }
 
-pub fn home(ledger: &Ledger, month: Option<&str>, now: chrono::DateTime<chrono::Local>) -> Home {
+fn title(t: &Transaction) -> String {
+    match (&t.payee, &t.narration) {
+        (Some(p), Some(n)) => format!("{p} · {n}"),
+        (Some(p), None) => p.clone(),
+        (None, Some(n)) => n.clone(),
+        (None, None) => "Transaction".to_string(),
+    }
+}
+
+pub fn home(ledger: &Ledger, month: Option<&str>, now: NaiveDateTime) -> Home {
+    let today = now.date();
     let currency = operating_currency(ledger);
     let code = currency.as_str();
-    let (prefix, suffix) = currency_affixes(code);
 
-    // (income, spent) per month that has any transaction.
     let mut flow_by_month: BTreeMap<MonthKey, (Decimal, Decimal)> = BTreeMap::new();
     for t in transactions(ledger) {
         let (inc, sp) = flows(t, currency);
@@ -226,9 +160,7 @@ pub fn home(ledger: &Ledger, month: Option<&str>, now: chrono::DateTime<chrono::
     }
 
     // Every calendar month from the first transaction to the last, gaps
-    // included, so the timeline and bar chart show quiet months as quiet
-    // rather than silently skipping them.
-    let today = now.date_naive();
+    // included, so stepping month to month never silently skips one.
     let keys: Vec<MonthKey> = match (
         flow_by_month.keys().next(),
         flow_by_month.keys().next_back(),
@@ -243,13 +175,9 @@ pub fn home(ledger: &Ledger, month: Option<&str>, now: chrono::DateTime<chrono::
         }
         _ => vec![(today.year(), today.month())],
     };
-    let spent_by_month: BTreeMap<MonthKey, Decimal> = keys
-        .iter()
-        .map(|k| (*k, flow_by_month.get(k).map(|f| f.1).unwrap_or_default()))
-        .collect();
 
     // Default to the latest month with real money movement — a month holding
-    // only a transfer between own accounts would open on an empty ₹0 gauge.
+    // only a transfer between own accounts would open on an empty ₹0.
     let latest = flow_by_month
         .iter()
         .rev()
@@ -260,36 +188,21 @@ pub fn home(ledger: &Ledger, month: Option<&str>, now: chrono::DateTime<chrono::
         .and_then(parse_month)
         .filter(|k| keys.contains(k))
         .unwrap_or(latest);
+    let idx = keys.iter().position(|k| *k == selected).unwrap_or(0);
     let (start, end) = (month_start(selected), end_of_month(month_start(selected)));
 
-    // Pills: up to six months around the selection, oldest first like a timeline.
-    let window_end = keys
-        .iter()
-        .position(|k| *k == selected)
-        .map(|i| (i + 3).min(keys.len()))
-        .unwrap_or(keys.len());
-    let window_start = window_end.saturating_sub(6);
-    let window = &keys[window_start..window_end];
-    let months = window
-        .iter()
-        .map(|&k| MonthPill {
-            label: month_start(k).format("%b").to_string(),
-            href: format!("/?month={}-{:02}", k.0, k.1),
-            active: k == selected,
-        })
-        .collect();
-
-    // This month's flows, categories, and activity.
     let mut income = Decimal::ZERO;
     let mut spent = Decimal::ZERO;
     let mut txn_count = 0;
+    let mut by_day = vec![Decimal::ZERO; end.day() as usize];
     let mut by_category: BTreeMap<String, (String, Decimal)> = BTreeMap::new();
-    let mut recent = Vec::new();
+    let mut activity = Vec::new();
     for t in transactions(ledger).filter(|t| t.date >= start && t.date <= end) {
         txn_count += 1;
         let (inc, sp) = flows(t, currency);
         income += inc;
         spent += sp;
+        by_day[t.date.day0() as usize] += sp;
 
         let mut biggest: Option<(String, Decimal)> = None;
         for p in &t.postings {
@@ -308,214 +221,178 @@ pub fn home(ledger: &Ledger, month: Option<&str>, now: chrono::DateTime<chrono::
                 biggest = Some((label, a.number));
             }
         }
-        recent.push((t, inc, sp, biggest.map(|(l, _)| l)));
-    }
 
-    let title = |t: &Transaction| match (&t.payee, &t.narration) {
-        (Some(p), Some(n)) => format!("{p} · {n}"),
-        (Some(p), None) => p.clone(),
-        (None, Some(n)) => n.clone(),
-        (None, None) => "Transaction".to_string(),
-    };
-    let recent: Vec<Activity> = recent
-        .into_iter()
-        .rev()
-        .take(6)
-        .map(|(t, inc, sp, category)| {
-            let date = t.date.format("%b %-d").to_string();
-            if sp > Decimal::ZERO {
-                let category = category.unwrap_or_else(|| "Spending".to_string());
-                Activity {
-                    emoji: category_emoji(&category),
-                    title: title(t),
-                    subtitle: format!("{date} · {category}"),
-                    amount: money(-sp, code, 2),
-                    class: "",
-                }
-            } else if inc > Decimal::ZERO {
-                Activity {
-                    emoji: "💰",
-                    title: title(t),
-                    subtitle: format!("{date} · Income"),
-                    amount: format!("+{}", money(inc, code, 2)),
-                    class: "pos",
-                }
-            } else {
-                // A transfer between the user's own accounts: show how much moved.
-                let moved: Decimal = t
-                    .postings
-                    .iter()
-                    .filter_map(|p| {
-                        p.amount
-                            .filter(|a| a.currency == currency && a.number > Decimal::ZERO)
-                    })
-                    .map(|a| a.number)
-                    .sum();
-                Activity {
-                    emoji: "🔁",
-                    title: title(t),
-                    subtitle: format!("{date} · Transfer"),
-                    amount: money(moved, code, 2),
-                    class: "muted",
-                }
+        let when = t.date.format("%-d %B").to_string();
+        let item = if sp > Decimal::ZERO {
+            Activity {
+                title: title(t),
+                when,
+                amount_html: money_html(-sp, code, natural_dp(sp)),
+                category: biggest
+                    .map(|(l, _)| l)
+                    .unwrap_or_else(|| "Spending".into())
+                    .to_uppercase(),
+                class: "",
+            }
+        } else if inc > Decimal::ZERO {
+            Activity {
+                title: title(t),
+                when,
+                amount_html: format!("+{}", money_html(inc, code, natural_dp(inc))),
+                category: "INCOME".into(),
+                class: "pos",
+            }
+        } else {
+            // A transfer between the user's own accounts: show how much moved.
+            let moved: Decimal = t
+                .postings
+                .iter()
+                .filter_map(|p| {
+                    p.amount
+                        .filter(|a| a.currency == currency && a.number > Decimal::ZERO)
+                })
+                .map(|a| a.number)
+                .sum();
+            Activity {
+                title: title(t),
+                when,
+                amount_html: money_html(moved, code, natural_dp(moved)),
+                category: "TRANSFER".into(),
+                class: "muted",
+            }
+        };
+        activity.push(item);
+    }
+    let activity: Vec<Activity> = activity.into_iter().rev().take(12).collect();
+
+    let max_day = by_day
+        .iter()
+        .copied()
+        .max()
+        .unwrap_or_default()
+        .max(Decimal::ONE);
+    let days = by_day
+        .iter()
+        .enumerate()
+        .map(|(i, amt)| {
+            let date = start + chrono::Duration::days(i as i64);
+            Day {
+                height: if amt.is_zero() {
+                    0.0
+                } else {
+                    ((*amt / max_day).to_f64().unwrap_or(0.0) * 100.0).max(6.0)
+                },
+                title: format!("{} · {}", date.format("%b %-d"), money(*amt, code, 0)),
+                any: !amt.is_zero(),
             }
         })
         .collect();
 
-    let mut categories: Vec<(String, Decimal)> = by_category
+    let mut sorted: Vec<(String, Decimal)> = by_category
         .into_values()
         .filter(|(_, n)| *n > Decimal::ZERO)
         .collect();
-    categories.sort_by(|a, b| b.1.cmp(&a.1));
-    let largest = categories.first().map(|(_, n)| *n).unwrap_or(Decimal::ONE);
-    let tile = |(label, amount): &(String, Decimal)| {
-        let share = if spent.is_zero() {
-            0.0
-        } else {
-            (*amount / spent).to_f64().unwrap_or(0.0)
-        };
-        Tile {
-            emoji: category_emoji(label),
-            label: label.clone(),
-            amount: money(*amount, code, 0),
-            pct: if share > 0.0 && share < 0.005 {
-                "<1%".to_string()
+    sorted.sort_by(|a, b| b.1.cmp(&a.1));
+    let largest = sorted.first().map(|(_, n)| *n).unwrap_or(Decimal::ONE);
+    // A short list reads at a glance; the tail rolls into "Other".
+    const MAX_CATEGORIES: usize = 7;
+    if sorted.len() > MAX_CATEGORIES {
+        let rest: Decimal = sorted
+            .split_off(MAX_CATEGORIES - 1)
+            .into_iter()
+            .map(|(_, n)| n)
+            .sum();
+        sorted.push(("Other".to_string(), rest));
+    }
+    let categories = sorted
+        .iter()
+        .map(|(label, amount)| {
+            let share = if spent.is_zero() {
+                0.0
             } else {
-                format!("{:.0}%", share * 100.0)
-            },
-            width: ((*amount / largest).to_f64().unwrap_or(0.0) * 100.0).clamp(4.0, 100.0),
-        }
-    };
-    let tiles: Vec<Tile> = categories.iter().take(9).map(tile).collect();
-    let top_category = categories.first().map(tile);
-
-    // The gauge: how much of this month's income has been spent.
-    let progress = if income > Decimal::ZERO {
-        (spent / income).to_f64().unwrap_or(0.0).clamp(0.0, 1.0)
-    } else if spent > Decimal::ZERO {
-        1.0
-    } else {
-        0.0
-    };
-    let (gauge_amount, gauge_caption) = if income > Decimal::ZERO {
-        let left = income - spent;
-        let caption = if left.is_sign_negative() {
-            format!("over your {} income", money(income, code, 0))
-        } else {
-            format!("left of {} income", money(income, code, 0))
-        };
-        (left, caption)
-    } else {
-        (spent, "spent this month".to_string())
-    };
-
-    let savings = if income > Decimal::ZERO {
-        ((income - spent) / income).to_f64().unwrap_or(0.0)
-    } else {
-        0.0
-    };
-    let savings_filled =
-        ((savings.clamp(0.0, 1.0) * SEGMENTS as f64).round() as usize).min(SEGMENTS);
-    let savings_caption = if income > Decimal::ZERO {
-        format!(
-            "Kept {} of {}",
-            money((income - spent).max(Decimal::ZERO), code, 0),
-            money(income, code, 0)
-        )
-    } else {
-        "No income recorded this month".to_string()
-    };
-
-    // Spending per month for the bar chart, over the same window as the pills.
-    let max_month = window
-        .iter()
-        .filter_map(|k| spent_by_month.get(k))
-        .copied()
-        .max()
-        .unwrap_or(Decimal::ONE)
-        .max(Decimal::ONE);
-    let bars = window
-        .iter()
-        .map(|&k| {
-            let amt = spent_by_month.get(&k).copied().unwrap_or_default();
-            Bar {
-                label: month_start(k).format("%b").to_string(),
-                amount: money(amt, code, 0),
-                height: ((amt / max_month).to_f64().unwrap_or(0.0) * 100.0).clamp(3.0, 100.0),
-                active: k == selected,
-                href: format!("/?month={}-{:02}", k.0, k.1),
+                (*amount / spent).to_f64().unwrap_or(0.0)
+            };
+            Category {
+                label: label.clone(),
+                amount: money(*amount, code, 0),
+                pct: if share > 0.0 && share < 0.005 {
+                    "<1%".into()
+                } else {
+                    format!("{:.0}%", share * 100.0)
+                },
+                width: ((*amount / largest).to_f64().unwrap_or(0.0) * 100.0).clamp(1.0, 100.0),
             }
         })
         .collect();
 
-    // Net worth as of the end of the selected month (or the last directive,
-    // whichever is earlier, so the current month isn't projected forward).
-    let last_date = ledger.directives.last().map(|d| d.date());
-    let nw_date = last_date.map(|d| d.min(end)).unwrap_or(end);
-    let net_worth = net_worth_now(ledger, nw_date)
+    let saved_up = income > Decimal::ZERO && spent <= income;
+    let (progress, saved_text) = if income > Decimal::ZERO {
+        let saved = ((income - spent) / income).to_f64().unwrap_or(0.0);
+        let p = (spent / income).to_f64().unwrap_or(0.0).clamp(0.0, 1.0) * 100.0;
+        let text = if saved >= 0.0 {
+            format!("{:.0}% saved", saved * 100.0)
+        } else {
+            format!("{:.0}% over income", -saved * 100.0)
+        };
+        (p, text)
+    } else {
+        (
+            if spent > Decimal::ZERO { 100.0 } else { 0.0 },
+            "No income this month".into(),
+        )
+    };
+
+    // Net worth at the end of the month shown (not projected past the ledger).
+    let nw_date = ledger
+        .directives
+        .last()
+        .map(|d| d.date().min(end))
+        .unwrap_or(end);
+    let net_worth_html = net_worth_now(ledger, nw_date)
         .into_iter()
-        .find(|c| c.prefix == prefix && c.suffix == suffix);
+        .find(|c| c.currency == code)
+        .map(|c| c.html);
     let series = net_worth_series(ledger, currency);
     let net_trend = trend_since_first(&series, code);
     let sparkline = render_net_worth_sparkline(&series, code);
 
-    let name = owner_name(ledger.meta.title.as_deref());
-    let initial = name
-        .chars()
-        .next()
-        .map(|c| c.to_uppercase().to_string())
-        .unwrap_or_else(|| "?".into());
+    let greeting = match owner_name(ledger.meta.title.as_deref()) {
+        Some(name) => format!("{}, {name}", greeting(now.hour())),
+        None => greeting(now.hour()).to_string(),
+    };
+    let dateline = format!(
+        "It's {} of {}, a {}",
+        ordinal(today.day()),
+        today.format("%B"),
+        today.format("%A")
+    );
 
     Home {
-        greeting: greeting(now.hour()),
-        initial,
-        name,
+        greeting,
+        dateline,
         month_label: start.format("%B %Y").to_string(),
-        months,
-        gauge_svg: gauge_svg(progress),
-        gauge_value: gauge_amount.to_f64().unwrap_or(0.0),
-        gauge_text: money(gauge_amount, code, 0),
-        gauge_caption,
-        prefix,
-        suffix,
+        prev_href: idx.checked_sub(1).map(|i| month_href(keys[i])),
+        next_href: keys.get(idx + 1).map(|k| month_href(*k)),
+        spent_html: money_html(spent, code, 0),
         income_text: money(income, code, 0),
-        spent_text: money(spent, code, 0),
-        net_worth,
+        saved_text,
+        saved_up,
+        axis_start: start.format("1 %b").to_string(),
+        axis_end: end.format("%-d %b").to_string(),
+        progress,
+        days,
+        categories,
+        activity,
+        txn_count,
+        net_worth_html,
         net_trend,
         sparkline,
-        savings_pct: format!("{:.0}%", (savings * 100.0).max(0.0)),
-        savings_filled,
-        savings_caption,
-        txn_count,
-        top_category,
-        bars,
-        bars_total: money(
-            spent_by_month.get(&selected).copied().unwrap_or_default(),
-            code,
-            0,
-        ),
-        tiles,
-        recent,
     }
-}
-
-/// A semicircular gauge (like a speedometer): a faint track, a bright arc
-/// for the share spent, and a knob at its tip. The arc's draw-in animation
-/// lives in CSS, keyed off the `--len` custom property set here.
-fn gauge_svg(progress: f64) -> String {
-    let len = std::f64::consts::PI * 90.0;
-    let offset = len * (1.0 - progress);
-    let angle = std::f64::consts::PI * (1.0 - progress);
-    let (kx, ky) = (110.0 + 90.0 * angle.cos(), 110.0 - 90.0 * angle.sin());
-    format!(
-        r#"<svg viewBox="0 0 220 122" class="gauge" aria-hidden="true"><path d="M20 110 A90 90 0 0 1 200 110" class="gauge-track"/><path d="M20 110 A90 90 0 0 1 200 110" class="gauge-fill" style="stroke-dasharray:{len:.2};stroke-dashoffset:{offset:.2};--len:{len:.2}"/><circle cx="{kx:.1}" cy="{ky:.1}" r="8" class="gauge-knob"/></svg>"#
-    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
     use std::path::PathBuf;
 
     fn fixture() -> Ledger {
@@ -524,45 +401,41 @@ mod tests {
         ob_core::load(&path).ledger
     }
 
-    fn noon() -> chrono::DateTime<chrono::Local> {
-        chrono::Local
-            .with_ymd_and_hms(2026, 1, 20, 12, 0, 0)
+    fn today() -> NaiveDateTime {
+        NaiveDate::from_ymd_opt(2026, 1, 20)
+            .unwrap()
+            .and_hms_opt(19, 30, 0)
             .unwrap()
     }
 
     #[test]
     fn home_summarizes_the_latest_month() {
-        let h = home(&fixture(), None, noon());
+        let h = home(&fixture(), None, today());
         assert_eq!(h.month_label, "January 2026");
         // Salary 50,000 + the 2.85 cashback folded into the rent settlement.
         assert_eq!(h.income_text, "₹50,003");
         // Rent 10,500.51 + Utilities 569.00 + Food 1,710.25
-        assert_eq!(h.spent_text, "₹12,780");
-        assert_eq!(h.gauge_text, "₹37,223");
-        assert_eq!(h.name, "there", "the fixture title has no possessive name");
-        assert_eq!(h.greeting, "Good afternoon");
-        assert_eq!(h.tiles[0].label, "Housing");
+        assert!(h.spent_html.ends_with("12,780"), "{}", h.spent_html);
+        assert_eq!(h.saved_text, "74% saved");
+        assert_eq!(h.categories[0].label, "Housing");
         assert_eq!(h.txn_count, 4);
-    }
-
-    #[test]
-    fn owner_name_reads_the_possessive_title() {
+        assert_eq!(h.days.len(), 31);
         assert_eq!(
-            owner_name(Some("Anin's Personal Finance - (From May 2026)")),
-            "Anin"
+            (h.prev_href.as_deref(), h.next_href.as_deref()),
+            (None, None)
         );
-        assert_eq!(owner_name(Some("Household books")), "there");
-        assert_eq!(owner_name(None), "there");
     }
 
     #[test]
     fn unknown_month_falls_back_to_latest() {
-        let h = home(&fixture(), Some("1999-01"), noon());
-        assert_eq!(h.month_label, "January 2026");
+        assert_eq!(
+            home(&fixture(), Some("1999-01"), today()).month_label,
+            "January 2026"
+        );
     }
 
     #[test]
-    fn defaults_past_transfer_only_months_and_keeps_gaps_in_the_timeline() {
+    fn defaults_past_transfer_only_months_and_steps_through_gaps() {
         let dir = std::env::temp_dir().join(format!("ob-home-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("gaps.beancount");
@@ -585,26 +458,53 @@ mod tests {
 "#,
         )
         .unwrap();
-        let h = home(&ob_core::load(&path).ledger, None, noon());
+        let ledger = ob_core::load(&path).ledger;
+        let h = home(&ledger, None, today());
         assert_eq!(h.month_label, "January 2026", "March only has a transfer");
-        let labels: Vec<_> = h.months.iter().map(|m| m.label.as_str()).collect();
         assert_eq!(
-            labels,
-            ["Jan", "Feb", "Mar"],
+            h.next_href.as_deref(),
+            Some("/?month=2026-02"),
             "February is a gap, not skipped"
         );
-        assert_eq!(h.gauge_text, "₹900");
+        let feb = home(&ledger, Some("2026-02"), today());
+        assert!(feb.spent_html.ends_with(">0"), "{}", feb.spent_html);
+        assert_eq!(feb.saved_text, "No income this month");
     }
 
     #[test]
-    fn transfers_show_as_neutral_moves() {
-        let h = home(&fixture(), None, noon());
-        let card = h
-            .recent
-            .iter()
-            .find(|a| a.title.contains("Card payment"))
-            .unwrap();
-        assert_eq!(card.emoji, "🔁");
-        assert_eq!(card.amount, "₹12,777.00");
+    fn transfers_show_as_neutral_moves_newest_first() {
+        let h = home(&fixture(), None, today());
+        let card = &h.activity[0];
+        assert_eq!(card.when, "5 January", "newest first");
+        assert_eq!((card.category.as_str(), card.class), ("TRANSFER", "muted"));
+        assert!(
+            card.amount_html.ends_with("12,777"),
+            "whole amounts drop the .00: {}",
+            card.amount_html
+        );
+    }
+
+    #[test]
+    fn greeting_and_dateline_read_like_a_sentence() {
+        let h = home(&fixture(), None, today());
+        assert_eq!(
+            h.greeting, "Good evening",
+            "fixture title has no possessive name"
+        );
+        assert_eq!(h.dateline, "It's 20th of January, a Tuesday");
+        assert_eq!(
+            owner_name(Some("Anin's Personal Finance")).as_deref(),
+            Some("Anin")
+        );
+        assert_eq!(
+            (ordinal(1), ordinal(2), ordinal(3), ordinal(11), ordinal(22)),
+            (
+                "1st".into(),
+                "2nd".into(),
+                "3rd".into(),
+                "11th".into(),
+                "22nd".into()
+            )
+        );
     }
 }

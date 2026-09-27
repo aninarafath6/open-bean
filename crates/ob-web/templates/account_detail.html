@@ -2,26 +2,20 @@
 {% import "macros.html" as m %}
 {% block title %}{{ detail.account }} · open-bean{% endblock %}
 {% block page_class %}narrow{% endblock %}
-{% block heading %}Account{% endblock %}
 {% block content %}
-<section class="hero-card blue rise" style="--i:0">
-  <p class="hero-eyebrow">{{ detail.account }}</p>
-  <p class="hero-value">{% call m::hero_value(detail.balance) %}</p>
+<section class="card card-pad">
+  <p class="eyebrow">{{ detail.account }}</p>
+  <p class="big">{% call m::hero_value(detail.balance) %}</p>
 </section>
-<p class="section-title">Activity</p>
-<div class="card rise" style="--i:1">
+<p class="eyebrow section">Activity</p>
+<div class="card">
   {% if detail.rows.is_empty() %}
   <div class="empty">No activity on this account yet.</div>
   {% endif %}
   {% for row in detail.rows %}
   <div class="row">
-    <span class="left">
-      <span><span class="label">{{ row.description }}</span><br><span class="sub">{{ row.date }}</span></span>
-    </span>
-    <span class="amounts">
-      <span class="{{ row.amount.class() }}">{{ row.amount.text }}</span>
-      <span class="sub">{{ row.running.text }}</span>
-    </span>
+    <span class="l"><span style="min-width:0"><span class="name">{{ row.description }}</span><br><span class="meta">{{ row.date }}</span></span></span>
+    <span class="r"><span class="{{ row.amount.class() }}">{{ row.amount.text }}</span><br><span class="meta">{{ row.running.text }}</span></span>
   </div>
   {% endfor %}
 </div>

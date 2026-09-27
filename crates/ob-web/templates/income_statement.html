@@ -2,16 +2,15 @@
 {% import "macros.html" as m %}
 {% block title %}Income · open-bean{% endblock %}
 {% block page_class %}narrow{% endblock %}
-{% block heading %}Income &amp; spending{% endblock %}
 {% block content %}
-<section class="hero-card rise" style="--i:0">
-  <p class="hero-eyebrow">Net · {{ stmt.start }} – {{ stmt.end }}</p>
-  <p class="hero-value">{% call m::hero_value(stmt.net) %}</p>
+<section class="card card-pad">
+  <p class="eyebrow">Net · {{ stmt.start }} – {{ stmt.end }}</p>
+  <p class="big">{% call m::hero_value(stmt.net) %}</p>
 </section>
 <form class="range" method="get">
   <label>From <input type="date" name="start" value="{{ stmt.start }}"></label>
   <label>To <input type="date" name="end" value="{{ stmt.end }}"></label>
-  <button class="btn-pill" type="submit">Update</button>
+  <button class="btn" type="submit">Update</button>
 </form>
 {% call m::section_card(stmt.income, 1) %}
 {% call m::section_card(stmt.expenses, 2) %}

@@ -2,11 +2,10 @@
 {% import "macros.html" as m %}
 {% block title %}Accounts · open-bean{% endblock %}
 {% block page_class %}narrow{% endblock %}
-{% block heading %}Accounts{% endblock %}
 {% block content %}
-<section class="hero-card blue rise" style="--i:0">
-  <p class="hero-eyebrow">Net worth · as of {{ page.as_of }}</p>
-  <p class="hero-value">{% call m::hero_value(page.net_worth) %}</p>
+<section class="card card-pad">
+  <p class="eyebrow">Net worth · as of {{ page.as_of }}</p>
+  <p class="big">{% call m::hero_value(page.net_worth) %}</p>
 </section>
 {% for section in page.sections %}{% call m::section_card(section, loop.index) %}{% endfor %}
 {% endblock %}

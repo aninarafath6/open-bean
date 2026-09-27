@@ -1,22 +1,22 @@
 {% macro section_card(section, i) %}
 {% if !section.rows.is_empty() %}
-<p class="section-title">{{ section.title }}</p>
-<div class="card rise" style="--i:{{ i }}">
+<p class="eyebrow section">{{ section.title }}</p>
+<div class="card">
   {% for row in section.rows %}
   <a class="row" href="{% if let Some(link) = row.link %}{{ link }}{% endif %}">
-    <span class="left">
-      <span class="avatar" style="--c:{{ row.avatar_color }}">{{ row.avatar_letter }}</span>
-      <span><span class="label">{{ row.title }}</span><br><span class="sub">{{ row.path }}</span></span>
+    <span class="l">
+      <span class="mark-i">{{ row.avatar_letter }}</span>
+      <span style="min-width:0"><span class="name">{{ row.title }}</span><br><span class="meta">{{ row.path }}</span></span>
     </span>
-    <span class="amounts">{% for c in row.cells %}<span class="{{ c.class() }}">{{ c.text }}</span>{% endfor %}</span>
+    <span class="r">{% for c in row.cells %}<span class="{{ c.class() }}">{{ c.text }}</span>{% endfor %}</span>
   </a>
   {% endfor %}
   <div class="row total">
-    <span class="label">Total</span>
-    <span class="amounts">{% for c in section.total %}<span class="{{ c.class() }}">{{ c.text }}</span>{% endfor %}</span>
+    <span class="eyebrow">Total</span>
+    <span class="r">{% for c in section.total %}<span class="{{ c.class() }}">{{ c.text }}</span>{% endfor %}</span>
   </div>
 </div>
 {% endif %}
 {% endmacro %}
 
-{% macro hero_value(cells) %}{% for c in cells %}<span data-countup="{{ c.value }}" data-prefix="{{ c.prefix }}" data-suffix="{{ c.suffix }}">{{ c.text }}</span>{% endfor %}{% endmacro %}
+{% macro hero_value(cells) %}{% for c in cells %}{{ c.html|safe }}{% endfor %}{% endmacro %}

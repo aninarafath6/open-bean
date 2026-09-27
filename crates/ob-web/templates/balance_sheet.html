@@ -2,15 +2,14 @@
 {% import "macros.html" as m %}
 {% block title %}Balance Sheet · open-bean{% endblock %}
 {% block page_class %}narrow{% endblock %}
-{% block heading %}Balance sheet{% endblock %}
 {% block content %}
-<section class="hero-card blue rise" style="--i:0">
-  <p class="hero-eyebrow">Net worth · as of {{ sheet.as_of }}</p>
-  <p class="hero-value">{% call m::hero_value(sheet.net_worth) %}</p>
+<section class="card card-pad">
+  <p class="eyebrow">Net worth · as of {{ sheet.as_of }}</p>
+  <p class="big">{% call m::hero_value(sheet.net_worth) %}</p>
 </section>
 <form class="range" method="get">
   <label>As of <input type="date" name="as_of" value="{{ sheet.as_of }}"></label>
-  <button class="btn-pill" type="submit">Update</button>
+  <button class="btn" type="submit">Update</button>
 </form>
 {% call m::section_card(sheet.assets, 1) %}
 {% call m::section_card(sheet.liabilities, 2) %}

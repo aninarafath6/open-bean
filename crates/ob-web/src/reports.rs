@@ -26,13 +26,10 @@ pub enum Tone {
 pub struct Cell {
     pub text: String,
     pub tone: Tone,
-    /// The raw display value plus the currency affixes, so a hero number can
-    /// animate a count-up in JS from the same value the static `text`
-    /// renders — kept alongside `text` rather than replacing it, since most
-    /// cells (table rows, totals) render `text` directly with no animation.
-    pub value: f64,
-    pub prefix: String,
-    pub suffix: String,
+    /// The same amount as display markup (small raised ₹, spaced minus) for
+    /// headline numbers; see `money_html`.
+    pub html: String,
+    pub currency: String,
 }
 
 impl Cell {
@@ -57,25 +54,8 @@ pub struct Row {
     pub path: String,
     pub link: Option<String>,
     pub cells: Vec<Cell>,
-    /// A WhatsApp-style fallback avatar: a single initial on a colored
-    /// circle, colored by the account's root type and lettered by its own
-    /// last segment (so "Checking" and "Cash" under Assets both read green
-    /// but stay visually distinct from each other).
+    /// The leaf name's initial, shown in a small monochrome mark.
     pub avatar_letter: String,
-    pub avatar_color: &'static str,
-}
-
-/// A fixed, brand-distinct color per root account type for row avatars —
-/// picked to sit apart from the WhatsApp teal-green accent so a row's
-/// avatar never gets mistaken for an interactive/brand element.
-fn avatar_color(root: AccountType) -> &'static str {
-    match root {
-        AccountType::Assets => "#00A884",
-        AccountType::Liabilities => "#F0A02B",
-        AccountType::Equity => "#8B5CF6",
-        AccountType::Income => "#3B82F6",
-        AccountType::Expenses => "#EF5A6F",
-    }
 }
 
 fn title_and_path(account: Account) -> (String, String) {
@@ -107,7 +87,31 @@ pub struct Section {
 /// Grouped number formatting with exactly `dp` decimals ("91,667.00" at 2,
 /// "91,667" at 0), the way any polished finance UI presents currency
 /// regardless of how it was entered in the source ledger.
+#[cfg(test)]
 pub(crate) fn format_number(amount: Decimal, dp: u32) -> String {
+    format_grouped(amount, dp, false)
+}
+
+/// Western grouping (1,234,567) or, with `indian`, lakh/crore grouping
+/// (12,34,567) — the way rupee amounts are read in India.
+fn group_digits(int_part: &str, indian: bool) -> String {
+    let digits: Vec<char> = int_part.chars().collect();
+    let mut out: Vec<char> = Vec::with_capacity(digits.len() + digits.len() / 2);
+    for (i, d) in digits.iter().rev().enumerate() {
+        let boundary = if indian {
+            i == 3 || (i > 3 && (i - 3) % 2 == 0)
+        } else {
+            i > 0 && i % 3 == 0
+        };
+        if boundary {
+            out.push(',');
+        }
+        out.push(*d);
+    }
+    out.into_iter().rev().collect()
+}
+
+pub(crate) fn format_grouped(amount: Decimal, dp: u32, indian: bool) -> String {
     let mut rounded = amount.round_dp(dp);
     // `round_dp` never *adds* scale (2.5 stays "2.5"), so pin it exactly.
     rounded.rescale(dp);
@@ -119,21 +123,7 @@ pub(crate) fn format_number(amount: Decimal, dp: u32) -> String {
         Some((i, f)) => (i, Some(f)),
         None => (digits, None),
     };
-    let grouped: String = int_part
-        .as_bytes()
-        .iter()
-        .rev()
-        .enumerate()
-        .flat_map(|(i, &b)| {
-            if i > 0 && i % 3 == 0 {
-                vec![b',', b]
-            } else {
-                vec![b]
-            }
-        })
-        .rev()
-        .map(|b| b as char)
-        .collect();
+    let grouped = group_digits(int_part, indian);
     let sign = if negative
         && (grouped != "0" || frac_part.is_some_and(|f| f.bytes().any(|b| b != b'0')))
     {
@@ -167,13 +157,46 @@ pub(crate) fn currency_affixes(code: &str) -> (String, String) {
 
 /// A formatted amount with its currency, sign placed before the symbol
 /// (-₹680.00, not ₹-680.00).
+/// Rupees use Indian grouping (₹3,49,904).
 pub(crate) fn money(amount: Decimal, code: &str, dp: u32) -> String {
     let (prefix, suffix) = currency_affixes(code);
-    let s = format_number(amount, dp);
+    let s = format_grouped(amount, dp, code == "INR");
     match s.strip_prefix('-') {
         Some(abs) => format!("-{prefix}{abs}{suffix}"),
         None => format!("{prefix}{s}{suffix}"),
     }
+}
+
+/// Two decimals only when there are paise to show: ₹562, but ₹4,331.36.
+pub(crate) fn natural_dp(amount: Decimal) -> u32 {
+    if amount.round_dp(2).fract().is_zero() {
+        0
+    } else {
+        2
+    }
+}
+
+/// `money` as headline markup: a spaced, muted minus and a small raised
+/// currency symbol ("– ₹562"), the way a finance app sets a big number.
+/// Only ever built from our own formatted digits, so it's safe to emit raw.
+pub(crate) fn money_html(amount: Decimal, code: &str, dp: u32) -> String {
+    let (prefix, suffix) = currency_affixes(code);
+    let s = format_grouped(amount, dp, code == "INR");
+    let (sign, digits) = match s.strip_prefix('-') {
+        Some(abs) => (r#"<span class="minus">–</span>"#, abs.to_string()),
+        None => ("", s),
+    };
+    let cur = if prefix.is_empty() {
+        String::new()
+    } else {
+        format!(r#"<span class="cur">{prefix}</span>"#)
+    };
+    let code = if suffix.is_empty() {
+        String::new()
+    } else {
+        format!(r#"<span class="code">{suffix}</span>"#)
+    };
+    format!("{sign}{cur}{digits}{code}")
 }
 
 pub(crate) fn operating_currency(ledger: &Ledger) -> Ustr {
@@ -198,13 +221,11 @@ fn cell(amount: Decimal, currency: &str, flip: bool, colorize: bool) -> Cell {
     } else {
         Tone::Positive
     };
-    let (prefix, suffix) = currency_affixes(currency);
     Cell {
         text: money(display, currency, 2),
         tone,
-        value: display.to_f64().unwrap_or(0.0),
-        prefix,
-        suffix,
+        html: money_html(display, currency, 2),
+        currency: currency.to_string(),
     }
 }
 
@@ -246,7 +267,6 @@ fn build_section(
             link: Some(format!("{link_prefix}{account}")),
             cells,
             avatar_letter: avatar_letter(account),
-            avatar_color: avatar_color(root),
         });
     }
     let total = totals
@@ -389,13 +409,11 @@ pub(crate) fn signed_cell(amount: Decimal, currency: &str) -> Cell {
     } else {
         Tone::Positive
     };
-    let (prefix, suffix) = currency_affixes(currency);
     Cell {
         text,
         tone,
-        value: amount.to_f64().unwrap_or(0.0),
-        prefix,
-        suffix,
+        html: money_html(amount, currency, 2),
+        currency: currency.to_string(),
     }
 }
 
@@ -794,6 +812,23 @@ mod tests {
         assert_eq!(format_number(Decimal::new(9166749, 2), 0), "91,667");
         assert_eq!(money(Decimal::new(-68000, 2), "INR", 2), "-₹680.00");
         assert_eq!(money(Decimal::new(500, 0), "XYZ", 0), "500 XYZ");
+        assert_eq!(
+            money(Decimal::new(349904, 0), "INR", 0),
+            "₹3,49,904",
+            "lakh grouping"
+        );
+        assert_eq!(
+            money(Decimal::new(12345678, 0), "INR", 0),
+            "₹1,23,45,678",
+            "crore grouping"
+        );
+        assert_eq!(money(Decimal::new(1234567, 0), "USD", 0), "$1,234,567");
+        assert_eq!(natural_dp(Decimal::new(562, 0)), 0);
+        assert_eq!(natural_dp(Decimal::new(433136, 2)), 2);
+        assert_eq!(
+            money_html(Decimal::new(-562, 0), "INR", 0),
+            r#"<span class="minus">–</span><span class="cur">₹</span>562"#
+        );
     }
 
     #[test]

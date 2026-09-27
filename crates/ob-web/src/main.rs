@@ -139,7 +139,11 @@ async fn home_page(State(state): State<AppState>, Query(q): Query<MonthQuery>) -
         booking_errors,
     } = state.load();
     let errors = render_errors(parse_errors, booking_errors);
-    let home = home::home(&ledger, q.month.as_deref(), chrono::Local::now());
+    let home = home::home(
+        &ledger,
+        q.month.as_deref(),
+        chrono::Local::now().naive_local(),
+    );
     render(HomeTemplate {
         nav: "home",
         errors,

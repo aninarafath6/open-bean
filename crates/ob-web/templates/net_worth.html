@@ -2,15 +2,14 @@
 {% import "macros.html" as m %}
 {% block title %}Trends · open-bean{% endblock %}
 {% block page_class %}narrow{% endblock %}
-{% block heading %}Net worth{% endblock %}
 {% block content %}
-<section class="hero-card blue rise" style="--i:0">
-  <p class="hero-eyebrow">Net worth today</p>
-  <p class="hero-value">{% call m::hero_value(page.current) %}</p>
+<section class="card card-pad">
+  <p class="eyebrow">Net worth today</p>
+  <p class="big">{% call m::hero_value(page.current) %}</p>
   {% if let Some(trend) = page.trend %}
-  <span class="trend-chip">{% if trend.is_negative() %}▼{% else %}▲{% endif %} {{ trend.text }} all-time</span>
+  <p class="note"><span class="{% if trend.is_negative() %}down{% else %}up{% endif %}">{% if trend.is_negative() %}↓{% else %}↑{% endif %} {{ trend.text }}</span> all-time</p>
   {% endif %}
 </section>
-<p class="section-title">Over time</p>
-<div class="card chart-wrap rise" style="--i:1">{{ page.svg|safe }}</div>
+<p class="eyebrow section">Over time</p>
+<div class="card card-pad">{{ page.svg|safe }}</div>
 {% endblock %}
