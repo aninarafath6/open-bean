@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Income Statement · open-bean{% endblock %}
+{% block content %}
+{% if !errors.is_empty() %}
+<div class="errors">{% for e in errors %}{{ e }}
+{% endfor %}</div>
+{% endif %}
+
+<form class="range" method="get">
+  <label>From <input type="date" name="start" value="{{ stmt.start }}"></label>
+  <label>To <input type="date" name="end" value="{{ stmt.end }}"></label>
+  <button type="submit">Update</button>
+</form>
+
+<h2>{{ stmt.income.title }}</h2>
+<table>
+{% for row in stmt.income.rows %}
+<tr><td>{% if let Some(link) = row.link %}<a href="{{ link }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}</td>{% for c in row.cells %}<td class="num {% if c.negative %}neg{% else %}pos{% endif %}">{{ c.text }}</td>{% endfor %}</tr>
+{% endfor %}
+<tr class="total"><td>Total</td>{% for c in stmt.income.total %}<td class="num {% if c.negative %}neg{% else %}pos{% endif %}">{{ c.text }}</td>{% endfor %}</tr>
+</table>
+
+<h2>{{ stmt.expenses.title }}</h2>
+<table>
+{% for row in stmt.expenses.rows %}
+<tr><td>{% if let Some(link) = row.link %}<a href="{{ link }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}</td>{% for c in row.cells %}<td class="num {% if c.negative %}neg{% else %}pos{% endif %}">{{ c.text }}</td>{% endfor %}</tr>
+{% endfor %}
+<tr class="total"><td>Total</td>{% for c in stmt.expenses.total %}<td class="num {% if c.negative %}neg{% else %}pos{% endif %}">{{ c.text }}</td>{% endfor %}</tr>
+</table>
+
+<h2>Net</h2>
+<table>
+<tr>{% for c in stmt.net %}<td class="num {% if c.negative %}neg{% else %}pos{% endif %}">{{ c.text }}</td>{% endfor %}</tr>
+</table>
+{% endblock %}

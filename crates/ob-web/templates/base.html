@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}open-bean{% endblock %}</title>
+<style>
+  :root {
+    --bg:#0b0d10; --fg:#e6e6e6; --muted:#9aa4ad; --line:#232830;
+    --accent:#5eb0ef; --pos:#4caf7d; --neg:#e0665a; --err-bg:#3a1616; --err-fg:#ffd7d3; --err-line:#7a2c26;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg:#fbfbfa; --fg:#1a1d21; --muted:#5b6570; --line:#e4e7eb;
+      --accent:#1868b7; --pos:#1f8a56; --neg:#c23a2e; --err-bg:#fdeceb; --err-fg:#7a2c26; --err-line:#f2c6c1;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  header { display:flex; align-items:center; gap:1.5rem; padding:1rem 1.5rem; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:1rem; margin:0; font-weight:600; }
+  nav { display:flex; gap:1rem; flex-wrap:wrap; }
+  nav a { color:var(--muted); text-decoration:none; font-size:.9rem; }
+  nav a:hover { color:var(--fg); }
+  main { padding:1.5rem; max-width:960px; margin:0 auto; }
+  table { width:100%; border-collapse:collapse; margin:.5rem 0 1.5rem; }
+  th, td { text-align:left; padding:.4rem .6rem; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; }
+  td.num, th.num { text-align:right; white-space:nowrap; }
+  tr.total td { font-weight:600; border-top:1px solid var(--line); border-bottom:none; }
+  .pos { color:var(--pos); }
+  .neg { color:var(--neg); }
+  .muted { color:var(--muted); }
+  a { color:var(--accent); }
+  h2 { font-size:1.05rem; margin:1.5rem 0 .25rem; }
+  .errors { background:var(--err-bg); color:var(--err-fg); border:1px solid var(--err-line); padding:1rem; border-radius:6px; margin-bottom:1.5rem; white-space:pre-wrap; font-family:ui-monospace,Menlo,monospace; font-size:.8rem; }
+  form.range { display:flex; gap:.6rem; align-items:center; margin:1rem 0 1.5rem; flex-wrap:wrap; }
+  form.range label { color:var(--muted); font-size:.85rem; }
+  input[type=date] { background:var(--bg); color:var(--fg); border:1px solid var(--line); padding:.3rem .5rem; border-radius:4px; }
+  button { background:var(--accent); color:#04121d; border:none; padding:.35rem .8rem; border-radius:4px; cursor:pointer; font-weight:600; }
+  .chart { width:100%; height:auto; }
+  .chart-line { stroke:var(--accent); stroke-width:2; }
+  .chart-point { fill:var(--accent); }
+  .chart-zero { stroke:var(--line); stroke-dasharray:4 3; }
+  .chart-label { fill:var(--muted); font-size:11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>open-bean</h1>
+  <nav>
+    <a href="/accounts">Accounts</a>
+    <a href="/reports/balance-sheet">Balance Sheet</a>
+    <a href="/reports/income-statement">Income Statement</a>
+    <a href="/reports/net-worth">Net Worth</a>
+  </nav>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

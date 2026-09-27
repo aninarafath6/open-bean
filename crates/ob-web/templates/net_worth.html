@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Net Worth · open-bean{% endblock %}
+{% block content %}
+{% if !errors.is_empty() %}
+<div class="errors">{% for e in errors %}{{ e }}
+{% endfor %}</div>
+{% endif %}
+
+<h2>Net Worth Over Time</h2>
+{{ svg|safe }}
+{% endblock %}

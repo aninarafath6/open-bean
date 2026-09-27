@@ -40,6 +40,39 @@ pub fn balance_at(ledger: &Ledger, account: Account, as_of: NaiveDate) -> Invent
     inventory
 }
 
+/// The net change in `account`'s balance from postings dated in
+/// `[start, end]` only — unlike `balance_at`, not cumulative from the start
+/// of the ledger. This is what a period report (income statement,
+/// budget-vs-actual) wants: "how much was earned/spent in March", not
+/// "what's the all-time total".
+pub fn balance_in_range(
+    ledger: &Ledger,
+    account: Account,
+    start: NaiveDate,
+    end: NaiveDate,
+) -> Inventory {
+    let mut inventory = Inventory::new();
+    for directive in &ledger.directives {
+        if directive.date() < start {
+            continue;
+        }
+        if directive.date() > end {
+            break;
+        }
+        if let Directive::Transaction(txn) = directive {
+            for posting in &txn.postings {
+                if posting.account == account {
+                    let amount = posting
+                        .amount
+                        .expect("transactions are booked before querying");
+                    *inventory.entry(amount.currency).or_default() += amount.number;
+                }
+            }
+        }
+    }
+    inventory
+}
+
 /// Every posting to `account`, alongside the transaction it belongs to, in
 /// date order.
 pub fn postings_for_account(ledger: &Ledger, account: Account) -> Vec<(&Transaction, &Posting)> {
@@ -57,7 +90,11 @@ pub fn postings_for_account(ledger: &Ledger, account: Account) -> Vec<(&Transact
 
 /// All transactions with a date in `[start, end]`, for period reports
 /// (income statement, budget-vs-actual).
-pub fn transactions_in_range(ledger: &Ledger, start: NaiveDate, end: NaiveDate) -> Vec<&Transaction> {
+pub fn transactions_in_range(
+    ledger: &Ledger,
+    start: NaiveDate,
+    end: NaiveDate,
+) -> Vec<&Transaction> {
     ledger
         .directives
         .iter()

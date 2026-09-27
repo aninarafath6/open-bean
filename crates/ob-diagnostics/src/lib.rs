@@ -2,7 +2,10 @@
 //! so `ob-syntax` parse errors and `ob-core` booking errors render through the
 //! same miette machinery on both the CLI and the web API.
 
-pub use miette::{Diagnostic, GraphicalReportHandler, JSONReportHandler, NamedSource, Report};
+pub use miette::{
+    Diagnostic, GraphicalReportHandler, JSONReportHandler, NamedSource, NarratableReportHandler,
+    Report,
+};
 pub use thiserror::Error;
 
 /// A byte-offset span into a source file, independent of miette so `ob-syntax`
@@ -64,11 +67,21 @@ impl SourceFile {
 }
 
 /// Render a diagnostic (and its source-code chain) to a plain string using the
-/// graphical (CLI-friendly) handler. Used by `ob-cli`; the web API instead
-/// uses `JSONReportHandler` directly against `miette::Report`.
+/// graphical (CLI-friendly, ANSI-colored) handler. Used by `ob-cli`.
 pub fn render_graphical(report: &Report) -> String {
     let mut out = String::new();
     GraphicalReportHandler::new()
+        .render_report(&mut out, report.as_ref())
+        .expect("formatting a diagnostic never fails");
+    out
+}
+
+/// Render a diagnostic as plain, ANSI-free prose — safe to drop straight
+/// into an HTML `<pre>` (after escaping) since it never emits terminal
+/// color codes. Used by the web UI.
+pub fn render_narratable(report: &Report) -> String {
+    let mut out = String::new();
+    NarratableReportHandler::new()
         .render_report(&mut out, report.as_ref())
         .expect("formatting a diagnostic never fails");
     out

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ detail.account }} · open-bean{% endblock %}
+{% block content %}
+{% if !errors.is_empty() %}
+<div class="errors">{% for e in errors %}{{ e }}
+{% endfor %}</div>
+{% endif %}
+
+<h2>{{ detail.account }}</h2>
+<table>
+<thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th><th class="num">Balance</th></tr></thead>
+{% for row in detail.rows %}
+<tr>
+  <td>{{ row.date }}</td>
+  <td>{{ row.description }}</td>
+  <td class="num {% if row.amount.negative %}neg{% else %}pos{% endif %}">{{ row.amount.text }}</td>
+  <td class="num {% if row.running.negative %}neg{% else %}pos{% endif %}">{{ row.running.text }}</td>
+</tr>
+{% endfor %}
+<tr class="total">
+  <td colspan="3">Balance</td>
+  {% for c in detail.balance %}<td class="num {% if c.negative %}neg{% else %}pos{% endif %}">{{ c.text }}</td>{% endfor %}
+</tr>
+</table>
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Accounts · open-bean{% endblock %}
+{% block content %}
+{% if !errors.is_empty() %}
+<div class="errors">{% for e in errors %}{{ e }}
+{% endfor %}</div>
+{% endif %}
+
+{% for section in sections %}
+{% if !section.rows.is_empty() %}
+<h2>{{ section.title }}</h2>
+<table>
+{% for row in section.rows %}
+<tr>
+  <td>{% if let Some(link) = row.link %}<a href="{{ link }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}</td>
+  {% for c in row.cells %}<td class="num {% if c.negative %}neg{% else %}pos{% endif %}">{{ c.text }}</td>{% endfor %}
+</tr>
+{% endfor %}
+<tr class="total"><td>Total</td>{% for c in section.total %}<td class="num {% if c.negative %}neg{% else %}pos{% endif %}">{{ c.text }}</td>{% endfor %}</tr>
+</table>
+{% endif %}
+{% endfor %}
+{% endblock %}
